@@ -2,7 +2,6 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { CredentialsSignin } from "next-auth";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
 
 class PendingApprovalError extends CredentialsSignin {
@@ -19,6 +18,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Senha", type: "password" },
       },
       async authorize(credentials) {
+        const { prisma } = await import("@/lib/prisma");
         const email = credentials?.email as string | undefined;
         const password = credentials?.password as string | undefined;
         if (!email?.trim() || !password) {

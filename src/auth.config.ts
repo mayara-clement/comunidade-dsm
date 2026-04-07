@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import { getAuthSecret } from "@/lib/auth-env";
 
 /**
  * Config compartilhada e compatível com Edge (sem Prisma/bcrypt).
@@ -6,6 +7,7 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const authConfig = {
   trustHost: true,
+  secret: getAuthSecret(),
   providers: [],
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/login" },

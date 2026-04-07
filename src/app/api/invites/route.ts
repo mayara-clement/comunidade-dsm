@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { auth } from "@/auth";
+import { getAuthAppUrl } from "@/lib/auth-env";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   });
 
   const base =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ??
+    getAuthAppUrl() ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
 
   const inviteUrl = base ? `${base}/register?token=${encodeURIComponent(row.token)}` : `/register?token=${encodeURIComponent(row.token)}`;
