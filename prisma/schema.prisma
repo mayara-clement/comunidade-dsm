@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FOUNDER
+  MEMBER
+}
+
+enum MembershipStatus {
+  PENDING
+  APPROVED
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id               String           @id @default(cuid())
+  email            String           @unique
+  passwordHash     String
+  name             String?
+  role             Role             @default(MEMBER)
+  membershipStatus MembershipStatus @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  invitesCreated InviteToken[] @relation("InviteCreator")
+  inviteUsed     InviteToken?  @relation("InviteUsedBy")
+
+  servicesOffered      Service[]          @relation("ServiceProvider")
+  hireRequestsSent     ServiceRequest[]   @relation("Requester")
+  hireRequestsReceived ServiceRequest[]   @relation("Provider")
+}
+
+model InviteToken {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  usedById    String?   @unique
+  usedBy      User?     @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdById])
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    User     @relation("ServiceProvider", fields: [providerId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  priceLabel  String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requests ServiceRequest[]
+
+  @@index([providerId])
+}
+
+model ServiceRequest {
+  id          String               @id @default(cuid())
+  serviceId   String
+  service     Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User                 @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  providerId  String
+  provider    User                 @relation("Provider", fields: [providerId], references: [id], onDelete: Cascade)
+  message     String?
+  status      ServiceRequestStatus @default(PENDING)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([serviceId])
+  @@index([requesterId])
+  @@index([providerId])
+}
