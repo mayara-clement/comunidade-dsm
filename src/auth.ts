@@ -8,8 +8,14 @@ class PendingApprovalError extends CredentialsSignin {
   code = "pending_approval";
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...authConfig,
+const { providers: _providersFromShared, ...sharedAuth } = authConfig;
+
+/**
+ * Inicialização lazy: setEnvDefaults roda a cada request com env atual da Vercel,
+ * evitando falha de config (ex.: secret vazio no assertConfig) em cold start.
+ */
+export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
+  ...sharedAuth,
   providers: [
     Credentials({
       name: "credentials",
@@ -51,4 +57,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-});
+}));

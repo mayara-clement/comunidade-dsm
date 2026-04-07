@@ -1,13 +1,11 @@
 import type { NextAuthConfig } from "next-auth";
-import { getAuthSecret } from "@/lib/auth-env";
 
 /**
  * Config compartilhada e compatível com Edge (sem Prisma/bcrypt).
- * O middleware importa só este arquivo para não estourar o limite de 1 MB na Vercel.
+ * Não defina `secret` aqui: o NextAuth aplica AUTH_SECRET / NEXTAUTH_SECRET em runtime via setEnvDefaults.
  */
 export const authConfig = {
   trustHost: true,
-  secret: getAuthSecret(),
   providers: [],
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/login" },
