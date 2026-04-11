@@ -30,30 +30,6 @@ export default function HomePage() {
             Criar conta com convite
           </Link>
         </div>
-        <ul className="mt-14 grid gap-4 sm:grid-cols-3">
-          {[
-            {
-              t: "Convites com cuidado",
-              d: "Novos perfis entram só por convite, com aprovação de quem coordena.",
-            },
-            {
-              t: "Dois painéis claros",
-              d: "Fundadores organizam entradas; membros negociam serviços com transparência.",
-            },
-            {
-              t: "Pronto para a nuvem",
-              d: "PostgreSQL + Next.js — fácil de publicar (ex.: Vercel) quando precisar.",
-            },
-          ].map((item) => (
-            <li
-              key={item.t}
-              className="rounded-3xl border border-stone-200/90 bg-white/85 p-5 shadow-sm backdrop-blur"
-            >
-              <p className="text-sm font-semibold text-stone-800">{item.t}</p>
-              <p className="mt-2 text-sm leading-relaxed text-stone-600">{item.d}</p>
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );
