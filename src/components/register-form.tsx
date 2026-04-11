@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const inputClass =
   "mt-2 w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/15";
+
+type InviteKind = "NEW_COMMUNITY_OWNER" | "COMMUNITY_MEMBER" | null;
 
 export function RegisterForm() {
   const router = useRouter();
@@ -13,11 +15,48 @@ export function RegisterForm() {
 
   const [token, setToken] = useState(initialToken);
   const [name, setName] = useState("");
+  const [communityName, setCommunityName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+
+  const [inviteKind, setInviteKind] = useState<InviteKind>(null);
+  const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const checkToken = useCallback(async (t: string) => {
+    const trimmed = t.trim();
+    if (trimmed.length < 8) {
+      setInviteKind(null);
+      setInviteCommunityName(null);
+      setPreviewError(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/invites/preview?token=${encodeURIComponent(trimmed)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!data.valid) {
+        setInviteKind(null);
+        setInviteCommunityName(null);
+        setPreviewError(data.error ?? "Convite inválido.");
+        return;
+      }
+      setInviteKind(data.kind ?? null);
+      setInviteCommunityName(data.communityName ?? null);
+      setPreviewError(null);
+    } catch {
+      setInviteKind(null);
+      setPreviewError(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialToken) {
+      void checkToken(initialToken);
+    }
+  }, [initialToken, checkToken]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,6 +72,7 @@ export function RegisterForm() {
           email: email.trim().toLowerCase(),
           password,
           name: name.trim() || undefined,
+          communityName: communityName.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -63,6 +103,7 @@ export function RegisterForm() {
           {message}
         </div>
       ) : null}
+
       <div>
         <label htmlFor="token" className="block text-sm font-medium text-stone-700">
           Token do convite
@@ -72,11 +113,43 @@ export function RegisterForm() {
           name="token"
           required
           value={token}
-          onChange={(e) => setToken(e.target.value)}
+          onChange={(e) => {
+            setToken(e.target.value);
+            void checkToken(e.target.value);
+          }}
           placeholder="Cole o token recebido"
           className={inputClass}
         />
+        {previewError ? (
+          <p className="mt-1 text-xs text-rose-600">{previewError}</p>
+        ) : null}
+        {inviteKind === "COMMUNITY_MEMBER" && inviteCommunityName ? (
+          <p className="mt-1 text-xs text-teal-700">
+            Convite para a comunidade: <strong>{inviteCommunityName}</strong>
+          </p>
+        ) : null}
+        {inviteKind === "NEW_COMMUNITY_OWNER" ? (
+          <p className="mt-1 text-xs text-teal-700">Convite para criar uma nova comunidade.</p>
+        ) : null}
       </div>
+
+      {inviteKind === "NEW_COMMUNITY_OWNER" ? (
+        <div>
+          <label htmlFor="communityName" className="block text-sm font-medium text-stone-700">
+            Nome da comunidade
+          </label>
+          <input
+            id="communityName"
+            name="communityName"
+            required
+            value={communityName}
+            onChange={(e) => setCommunityName(e.target.value)}
+            placeholder="Ex.: Comunidade de Tecnologia"
+            className={inputClass}
+          />
+        </div>
+      ) : null}
+
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-stone-700">
           Nome (opcional)

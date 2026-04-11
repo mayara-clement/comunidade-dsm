@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { uniqueCommunitySlug } from "@/lib/slug";
 
 const registerSchema = z.object({
   token: z.string().min(8),
   email: z.string().trim().min(1).max(255),
   password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres").max(128),
   name: z.string().trim().max(120).optional(),
+  communityName: z.string().trim().min(2).max(120).optional(),
 });
 
 function isValidEmail(email: string) {
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { token, email, password, name } = parsed.data;
+    const { token, email, password, name, communityName } = parsed.data;
     const emailNorm = email.toLowerCase();
     if (!isValidEmail(emailNorm)) {
       return NextResponse.json({ error: "Email inválido." }, { status: 400 });
@@ -45,6 +47,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Este convite expirou." }, { status: 400 });
     }
 
+    if (invite.kind === "NEW_COMMUNITY_OWNER") {
+      if (!communityName?.trim()) {
+        return NextResponse.json(
+          { error: "Informe o nome da nova comunidade." },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (invite.kind === "COMMUNITY_MEMBER") {
+      if (!invite.communityId) {
+        return NextResponse.json({ error: "Convite de membro inválido." }, { status: 400 });
+      }
+      const comm = await prisma.community.findUnique({
+        where: { id: invite.communityId },
+      });
+      if (!comm || comm.status !== "ACTIVE") {
+        return NextResponse.json(
+          { error: "Esta comunidade não está ativa para novos membros." },
+          { status: 400 },
+        );
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
 
     try {
@@ -54,10 +80,29 @@ export async function POST(req: Request) {
             email: emailNorm,
             passwordHash,
             name: name || null,
-            role: "MEMBER",
-            membershipStatus: "PENDING",
+            isPlatformFounder: false,
           },
         });
+
+        if (invite.kind === "NEW_COMMUNITY_OWNER") {
+          const slug = uniqueCommunitySlug(communityName!.trim());
+          await tx.community.create({
+            data: {
+              name: communityName!.trim(),
+              slug,
+              status: "PENDING_APPROVAL",
+              ownerId: created.id,
+            },
+          });
+        } else {
+          await tx.communityMembership.create({
+            data: {
+              communityId: invite.communityId!,
+              userId: created.id,
+              status: "PENDING",
+            },
+          });
+        }
 
         await tx.inviteToken.update({
           where: { id: invite.id },
@@ -81,12 +126,13 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    return NextResponse.json({
-      message:
-        "Conta criada. Aguarde a aprovação de um fundador para acessar a comunidade.",
-    });
+    const message =
+      invite.kind === "NEW_COMMUNITY_OWNER"
+        ? "Conta criada. Sua comunidade aguarda aprovação do fundador da plataforma para você poder acessar o painel."
+        : "Conta criada. Aguarde a aprovação do administrador da comunidade para acessar.";
+
+    return NextResponse.json({ message });
   } catch {
     return NextResponse.json({ error: "Não foi possível concluir o cadastro." }, { status: 500 });
   }
 }
-

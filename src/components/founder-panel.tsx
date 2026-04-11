@@ -2,18 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type PendingMember = {
+type CommunityRow = {
   id: string;
-  email: string;
-  name: string | null;
+  name: string;
+  slug: string;
+  status: "PENDING_APPROVAL" | "ACTIVE" | "REJECTED";
   createdAt: string;
+  owner: { id: string; email: string; name: string | null };
 };
 
 const btnGhost =
   "rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-800 shadow-sm transition hover:border-teal-400/50 hover:text-teal-900";
 
+const statusLabel: Record<CommunityRow["status"], string> = {
+  PENDING_APPROVAL: "Aguardando aprovação",
+  ACTIVE: "Ativa",
+  REJECTED: "Rejeitada",
+};
+
+const statusColor: Record<CommunityRow["status"], string> = {
+  PENDING_APPROVAL: "border-amber-200 bg-amber-50 text-amber-900",
+  ACTIVE: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  REJECTED: "border-rose-200 bg-rose-50 text-rose-900",
+};
+
 export function FounderPanel() {
-  const [pending, setPending] = useState<PendingMember[]>([]);
+  const [communities, setCommunities] = useState<CommunityRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -21,29 +35,31 @@ export function FounderPanel() {
   const [rawToken, setRawToken] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
 
-  const loadPending = useCallback(async () => {
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadCommunities = useCallback(async () => {
     setLoadingList(true);
     setListError(null);
     try {
-      const res = await fetch("/api/members/pending");
+      const res = await fetch("/api/platform/communities");
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setListError(data?.error ?? "Não foi possível carregar os membros.");
+        setListError(data?.error ?? "Não foi possível carregar as comunidades.");
         return;
       }
-      setPending(data.members ?? []);
+      setCommunities(data.communities ?? []);
     } catch {
-      setListError("Erro de rede ao carregar membros.");
+      setListError("Erro de rede ao carregar comunidades.");
     } finally {
       setLoadingList(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadPending();
-  }, [loadPending]);
+    void loadCommunities();
+  }, [loadCommunities]);
 
   async function createInvite() {
     setInviteBusy(true);
@@ -54,7 +70,7 @@ export function FounderPanel() {
       const res = await fetch("/api/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ kind: "NEW_COMMUNITY_OWNER" }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -71,19 +87,59 @@ export function FounderPanel() {
   }
 
   async function approve(id: string) {
-    setApproveBusyId(id);
+    setActionBusyId(id);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/members/${id}/approve`, { method: "POST" });
+      const res = await fetch(`/api/platform/communities/${id}/approve`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setListError(data?.error ?? "Não foi possível aprovar.");
+        setActionError(data?.error ?? "Não foi possível aprovar.");
         return;
       }
-      await loadPending();
+      await loadCommunities();
     } catch {
-      setListError("Erro de rede ao aprovar.");
+      setActionError("Erro de rede ao aprovar.");
     } finally {
-      setApproveBusyId(null);
+      setActionBusyId(null);
+    }
+  }
+
+  async function reject(id: string) {
+    setActionBusyId(id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/platform/communities/${id}/reject`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data?.error ?? "Não foi possível rejeitar.");
+        return;
+      }
+      await loadCommunities();
+    } catch {
+      setActionError("Erro de rede ao rejeitar.");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Tem certeza que deseja excluir esta comunidade? Esta ação não pode ser desfeita.")) {
+      return;
+    }
+    setActionBusyId(id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/platform/communities/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data?.error ?? "Não foi possível excluir.");
+        return;
+      }
+      await loadCommunities();
+    } catch {
+      setActionError("Erro de rede ao excluir.");
+    } finally {
+      setActionBusyId(null);
     }
   }
 
@@ -95,14 +151,17 @@ export function FounderPanel() {
     }
   }
 
+  const pending = communities.filter((c) => c.status === "PENDING_APPROVAL");
+  const others = communities.filter((c) => c.status !== "PENDING_APPROVAL");
+
   return (
     <div className="grid gap-8 lg:grid-cols-2">
       <section className="rounded-3xl border border-[var(--app-line)] bg-[var(--app-card)] p-6 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-stone-800">Convites</h2>
+            <h2 className="text-lg font-semibold text-stone-800">Convites para novos criadores</h2>
             <p className="mt-1 text-sm text-[var(--app-muted)]">
-              Gere um link exclusivo. Apenas pessoas com o token podem se cadastrar.
+              Gere um link exclusivo para que alguém crie uma nova comunidade na plataforma.
             </p>
           </div>
           <button
@@ -148,19 +207,19 @@ export function FounderPanel() {
       <section className="rounded-3xl border border-[var(--app-line)] bg-[var(--app-card)] p-6 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-stone-800">Aprovações pendentes</h2>
+            <h2 className="text-lg font-semibold text-stone-800">Comunidades pendentes</h2>
             <p className="mt-1 text-sm text-[var(--app-muted)]">
-              Membros aguardando liberação para entrar na comunidade.
+              Aprove ou rejeite comunidades aguardando liberação.
             </p>
           </div>
-          <button type="button" onClick={() => void loadPending()} className={btnGhost}>
+          <button type="button" onClick={() => void loadCommunities()} className={btnGhost}>
             Atualizar
           </button>
         </div>
 
-        {listError ? (
+        {actionError ? (
           <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950">
-            {listError}
+            {actionError}
           </p>
         ) : null}
 
@@ -168,33 +227,86 @@ export function FounderPanel() {
           {loadingList ? (
             <p className="text-sm text-[var(--app-muted)]">Carregando…</p>
           ) : pending.length === 0 ? (
-            <p className="text-sm text-[var(--app-muted)]">Não há solicitações pendentes.</p>
+            <p className="text-sm text-[var(--app-muted)]">Não há comunidades aguardando aprovação.</p>
           ) : (
-            pending.map((m) => (
+            pending.map((c) => (
               <div
-                key={m.id}
+                key={c.id}
                 className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-stone-50/80 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className="text-sm font-semibold text-stone-900">{m.email}</p>
-                  {m.name ? <p className="text-sm text-[var(--app-muted)]">{m.name}</p> : null}
+                  <p className="text-sm font-semibold text-stone-900">{c.name}</p>
+                  <p className="text-xs text-[var(--app-muted)]">
+                    Criador: {c.owner.name ?? c.owner.email}
+                  </p>
                   <p className="mt-1 text-xs text-stone-500">
-                    Solicitado em {new Date(m.createdAt).toLocaleString("pt-BR")}
+                    Solicitado em {new Date(c.createdAt).toLocaleString("pt-BR")}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  disabled={approveBusyId === m.id}
-                  onClick={() => void approve(m.id)}
-                  className="h-10 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {approveBusyId === m.id ? "Aprovando…" : "Aprovar acesso"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={actionBusyId === c.id}
+                    onClick={() => void approve(c.id)}
+                    className="h-9 rounded-2xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {actionBusyId === c.id ? "…" : "Aprovar"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={actionBusyId === c.id}
+                    onClick={() => void reject(c.id)}
+                    className="h-9 rounded-2xl border border-rose-300 bg-rose-50 px-4 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Rejeitar
+                  </button>
+                </div>
               </div>
             ))
           )}
         </div>
       </section>
+
+      {others.length > 0 ? (
+        <section className="rounded-3xl border border-[var(--app-line)] bg-[var(--app-card)] p-6 shadow-sm lg:col-span-2">
+          <h2 className="text-lg font-semibold text-stone-800">Todas as comunidades</h2>
+          <div className="mt-5 space-y-3">
+            {listError ? (
+              <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+                {listError}
+              </p>
+            ) : null}
+            {others.map((c) => (
+              <div
+                key={c.id}
+                className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-stone-50/80 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-stone-900">{c.name}</p>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${statusColor[c.status]}`}
+                    >
+                      {statusLabel[c.status]}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--app-muted)]">
+                    Criador: {c.owner.name ?? c.owner.email}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={actionBusyId === c.id}
+                  onClick={() => void remove(c.id)}
+                  className="h-9 shrink-0 rounded-2xl border border-rose-300 bg-rose-50 px-4 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionBusyId === c.id ? "Excluindo…" : "Excluir"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -10,10 +10,42 @@ class PendingApprovalError extends CredentialsSignin {
 
 const { providers: _providersFromShared, ...sharedAuth } = authConfig;
 
-/**
- * Inicialização lazy: setEnvDefaults roda a cada request com env atual da Vercel,
- * evitando falha de config (ex.: secret vazio no assertConfig) em cold start.
- */
+function canSignIn(user: {
+  isPlatformFounder: boolean;
+  ownedCommunities: { status: string }[];
+  communityMemberships: { status: string }[];
+}): boolean {
+  if (user.isPlatformFounder) {
+    return true;
+  }
+  const hasActiveOwned = user.ownedCommunities.some((c) => c.status === "ACTIVE");
+  if (hasActiveOwned) {
+    return true;
+  }
+  const hasApprovedMember = user.communityMemberships.some((m) => m.status === "APPROVED");
+  return hasApprovedMember;
+}
+
+function shouldBlockAsPending(user: {
+  isPlatformFounder: boolean;
+  ownedCommunities: { status: string }[];
+  communityMemberships: { status: string }[];
+}): boolean {
+  if (user.isPlatformFounder) {
+    return false;
+  }
+  if (canSignIn(user)) {
+    return false;
+  }
+  const waitingOwner = user.ownedCommunities.some((c) => c.status === "PENDING_APPROVAL");
+  const waitingMember = user.communityMemberships.some((m) => m.status === "PENDING");
+  const onlyRejected =
+    user.ownedCommunities.length > 0 &&
+    user.ownedCommunities.every((c) => c.status === "REJECTED") &&
+    user.communityMemberships.length === 0;
+  return waitingOwner || waitingMember || onlyRejected;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   ...sharedAuth,
   providers: [
@@ -33,6 +65,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
 
         const user = await prisma.user.findUnique({
           where: { email: email.trim().toLowerCase() },
+          include: {
+            ownedCommunities: true,
+            communityMemberships: true,
+          },
         });
         if (!user) {
           return null;
@@ -43,16 +79,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
           return null;
         }
 
-        if (user.membershipStatus === "PENDING") {
+        if (shouldBlockAsPending(user)) {
           throw new PendingApprovalError();
         }
+
+        if (!canSignIn(user)) {
+          throw new PendingApprovalError();
+        }
+
+        const activeOwned = user.ownedCommunities.find((c) => c.status === "ACTIVE");
+        const approvedMembership = user.communityMemberships.find((m) => m.status === "APPROVED");
 
         return {
           id: user.id,
           email: user.email,
           name: user.name ?? undefined,
-          role: user.role,
-          membershipStatus: user.membershipStatus,
+          isPlatformFounder: user.isPlatformFounder,
+          ownedCommunityId: activeOwned?.id ?? null,
+          memberCommunityId: approvedMembership?.communityId ?? null,
         };
       },
     }),

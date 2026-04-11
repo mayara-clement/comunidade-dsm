@@ -9,6 +9,12 @@ const createSchema = z.object({
   priceLabel: z.string().trim().max(80).optional().nullable(),
 });
 
+type SessionUser = { id: string; memberCommunityId: string | null; ownedCommunityId: string | null };
+
+function userCommunityId(user: SessionUser) {
+  return user.memberCommunityId ?? user.ownedCommunityId ?? null;
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   const { searchParams } = new URL(req.url);
@@ -19,18 +25,36 @@ export async function GET(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
     }
+    const cid = userCommunityId(session.user);
+    if (!cid) {
+      return NextResponse.json(
+        { error: "Você precisa pertencer a uma comunidade ativa." },
+        { status: 403 },
+      );
+    }
     const list = await prisma.service.findMany({
-      where: { providerId: session.user.id },
+      where: { providerId: session.user.id, communityId: cid },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ services: list });
   }
 
   if (marketplace) {
+    if (!session?.user) {
+      return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+    }
+    const cid = userCommunityId(session.user);
+    if (!cid) {
+      return NextResponse.json(
+        { error: "Você precisa pertencer a uma comunidade ativa." },
+        { status: 403 },
+      );
+    }
     const list = await prisma.service.findMany({
       where: {
         active: true,
-        ...(session?.user?.id ? { providerId: { not: session.user.id } } : {}),
+        communityId: cid,
+        ...(session.user.id ? { providerId: { not: session.user.id } } : {}),
       },
       orderBy: { createdAt: "desc" },
       include: {
@@ -53,11 +77,12 @@ export async function POST(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
-  const canUseServices =
-    session.user.membershipStatus === "APPROVED" &&
-    (session.user.role === "MEMBER" || session.user.role === "FOUNDER");
-  if (!canUseServices) {
-    return NextResponse.json({ error: "Você não pode publicar serviços no momento." }, { status: 403 });
+  const cid = userCommunityId(session.user);
+  if (!cid) {
+    return NextResponse.json(
+      { error: "Você não pode publicar serviços no momento." },
+      { status: 403 },
+    );
   }
 
   try {
@@ -76,6 +101,7 @@ export async function POST(req: Request) {
         description,
         priceLabel: priceLabel ?? null,
         providerId: session.user.id,
+        communityId: cid,
       },
     });
     return NextResponse.json({ service });

@@ -14,9 +14,36 @@ export default auth((req) => {
 
   if (isDashboard && req.auth?.user) {
     const path = req.nextUrl.pathname;
-    const role = req.auth.user.role;
-    if (path.startsWith("/dashboard/founder") && role !== "FOUNDER") {
-      return NextResponse.redirect(new URL("/dashboard/member", req.nextUrl.origin));
+    const u = req.auth.user;
+
+    if (path.startsWith("/dashboard/founder") && !u.isPlatformFounder) {
+      if (u.ownedCommunityId) {
+        return NextResponse.redirect(new URL("/dashboard/community-owner", req.nextUrl.origin));
+      }
+      if (u.memberCommunityId) {
+        return NextResponse.redirect(new URL("/dashboard/member", req.nextUrl.origin));
+      }
+      return NextResponse.redirect(new URL("/login?error=pending_approval", req.nextUrl.origin));
+    }
+
+    if (path.startsWith("/dashboard/community-owner") && !u.ownedCommunityId) {
+      if (u.isPlatformFounder) {
+        return NextResponse.redirect(new URL("/dashboard/founder", req.nextUrl.origin));
+      }
+      if (u.memberCommunityId) {
+        return NextResponse.redirect(new URL("/dashboard/member", req.nextUrl.origin));
+      }
+      return NextResponse.redirect(new URL("/login?error=pending_approval", req.nextUrl.origin));
+    }
+
+    if (path.startsWith("/dashboard/member") && !u.memberCommunityId) {
+      if (u.ownedCommunityId) {
+        return NextResponse.redirect(new URL("/dashboard/community-owner", req.nextUrl.origin));
+      }
+      if (u.isPlatformFounder) {
+        return NextResponse.redirect(new URL("/dashboard/founder", req.nextUrl.origin));
+      }
+      return NextResponse.redirect(new URL("/login?error=pending_approval", req.nextUrl.origin));
     }
   }
 

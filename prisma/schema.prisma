@@ -8,14 +8,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  FOUNDER
-  MEMBER
+enum CommunityStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
 }
 
 enum MembershipStatus {
   PENDING
   APPROVED
+}
+
+enum InviteKind {
+  NEW_COMMUNITY_OWNER
+  COMMUNITY_MEMBER
 }
 
 enum ServiceRequestStatus {
@@ -25,39 +31,81 @@ enum ServiceRequestStatus {
 }
 
 model User {
-  id               String           @id @default(cuid())
-  email            String           @unique
+  id               String   @id @default(cuid())
+  email            String   @unique
   passwordHash     String
   name             String?
-  role             Role             @default(MEMBER)
-  membershipStatus MembershipStatus @default(PENDING)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  isPlatformFounder Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   invitesCreated InviteToken[] @relation("InviteCreator")
   inviteUsed     InviteToken?  @relation("InviteUsedBy")
+
+  ownedCommunities Community[] @relation("CommunityOwner")
+
+  communityMemberships CommunityMembership[]
 
   servicesOffered      Service[]          @relation("ServiceProvider")
   hireRequestsSent     ServiceRequest[]   @relation("Requester")
   hireRequestsReceived ServiceRequest[]   @relation("Provider")
 }
 
+model Community {
+  id        String           @id @default(cuid())
+  name      String
+  slug      String           @unique
+  status    CommunityStatus  @default(PENDING_APPROVAL)
+  ownerId   String
+  owner     User             @relation("CommunityOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  memberships  CommunityMembership[]
+  services     Service[]
+  inviteTokens InviteToken[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model CommunityMembership {
+  id          String           @id @default(cuid())
+  communityId String
+  community   Community        @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      MembershipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([communityId, userId])
+  @@index([communityId])
+  @@index([userId])
+}
+
 model InviteToken {
-  id          String    @id @default(cuid())
-  token       String    @unique
+  id          String     @id @default(cuid())
+  token       String     @unique
+  kind        InviteKind
   createdById String
-  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  usedById    String?   @unique
-  usedBy      User?     @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+  createdBy   User       @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  communityId String?
+  community   Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  usedById    String?    @unique
+  usedBy      User?      @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
   usedAt      DateTime?
   expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime   @default(now())
 
   @@index([createdById])
+  @@index([communityId])
 }
 
 model Service {
   id          String   @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
   providerId  String
   provider    User     @relation("ServiceProvider", fields: [providerId], references: [id], onDelete: Cascade)
   title       String
@@ -69,6 +117,7 @@ model Service {
 
   requests ServiceRequest[]
 
+  @@index([communityId])
   @@index([providerId])
 }
 

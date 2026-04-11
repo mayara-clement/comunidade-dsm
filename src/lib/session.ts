@@ -9,18 +9,54 @@ export async function requireAuth() {
   return session;
 }
 
-export async function requireFounder() {
+export async function requirePlatformFounder() {
   const session = await requireAuth();
-  if (session.user.role !== "FOUNDER") {
-    redirect("/dashboard/member");
+  if (!session.user.isPlatformFounder) {
+    if (session.user.ownedCommunityId) {
+      redirect("/dashboard/community-owner");
+    }
+    if (session.user.memberCommunityId) {
+      redirect("/dashboard/member");
+    }
+    redirect("/login");
   }
   return session;
 }
 
-export async function requireApprovedMember() {
+export async function requireCommunityOwner() {
   const session = await requireAuth();
-  if (session.user.membershipStatus !== "APPROVED") {
+  if (!session.user.ownedCommunityId) {
+    if (session.user.isPlatformFounder) {
+      redirect("/dashboard/founder");
+    }
+    if (session.user.memberCommunityId) {
+      redirect("/dashboard/member");
+    }
     redirect("/login?error=pending_approval");
   }
   return session;
+}
+
+export async function requireApprovedCommunityMember() {
+  const session = await requireAuth();
+  if (!session.user.memberCommunityId) {
+    if (session.user.ownedCommunityId) {
+      redirect("/dashboard/community-owner");
+    }
+    if (session.user.isPlatformFounder) {
+      redirect("/dashboard/founder");
+    }
+    redirect("/login?error=pending_approval");
+  }
+  return session;
+}
+
+/** @deprecated use requirePlatformFounder */
+export async function requireFounder() {
+  return requirePlatformFounder();
+}
+
+/** @deprecated use requireApprovedCommunityMember */
+export async function requireApprovedMember() {
+  return requireApprovedCommunityMember();
 }

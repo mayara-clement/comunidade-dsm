@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 async function main() {
   const email = process.env.FOUNDER_EMAIL;
   const password = process.env.FOUNDER_PASSWORD;
-  const name = process.env.FOUNDER_NAME ?? "Fundador";
+  const name = process.env.FOUNDER_NAME ?? "Fundador da plataforma";
 
   if (!email || !password) {
     console.warn(
@@ -28,12 +28,11 @@ async function main() {
       email,
       passwordHash,
       name,
-      role: "FOUNDER",
-      membershipStatus: "APPROVED",
+      isPlatformFounder: true,
     },
   });
 
-  console.log("Fundador criado:", email);
+  console.log("Fundador da plataforma criado:", email);
 }
 
 main()

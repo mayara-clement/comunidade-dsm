@@ -9,15 +9,19 @@ const bodySchema = z.object({
 
 type Params = { params: Promise<{ id: string }> };
 
+type SessionUser = { id: string; memberCommunityId: string | null; ownedCommunityId: string | null };
+
+function userCommunityId(user: SessionUser) {
+  return user.memberCommunityId ?? user.ownedCommunityId ?? null;
+}
+
 export async function POST(req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
-  const canRequest =
-    session.user.membershipStatus === "APPROVED" &&
-    (session.user.role === "MEMBER" || session.user.role === "FOUNDER");
-  if (!canRequest) {
+  const cid = userCommunityId(session.user);
+  if (!cid) {
     return NextResponse.json({ error: "Você não pode solicitar serviços no momento." }, { status: 403 });
   }
 
@@ -25,6 +29,9 @@ export async function POST(req: Request, { params }: Params) {
   const service = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!service || !service.active) {
     return NextResponse.json({ error: "Serviço não encontrado." }, { status: 404 });
+  }
+  if (service.communityId !== cid) {
+    return NextResponse.json({ error: "Serviço não pertence à sua comunidade." }, { status: 403 });
   }
   if (service.providerId === session.user.id) {
     return NextResponse.json({ error: "Você não pode contratar o próprio serviço." }, { status: 400 });

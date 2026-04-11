@@ -4,21 +4,24 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      role: "FOUNDER" | "MEMBER";
-      membershipStatus: "PENDING" | "APPROVED";
+      isPlatformFounder: boolean;
+      ownedCommunityId: string | null;
+      memberCommunityId: string | null;
     } & DefaultSession["user"];
   }
 
   interface User {
-    role: "FOUNDER" | "MEMBER";
-    membershipStatus: "PENDING" | "APPROVED";
+    isPlatformFounder: boolean;
+    ownedCommunityId: string | null;
+    memberCommunityId: string | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
-    role: "FOUNDER" | "MEMBER";
-    membershipStatus: "PENDING" | "APPROVED";
+    isPlatformFounder: boolean;
+    ownedCommunityId: string | null;
+    memberCommunityId: string | null;
   }
 }

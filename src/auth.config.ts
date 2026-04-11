@@ -2,7 +2,6 @@ import type { NextAuthConfig } from "next-auth";
 
 /**
  * Config compartilhada e compatível com Edge (sem Prisma/bcrypt).
- * Não defina `secret` aqui: o NextAuth aplica AUTH_SECRET / NEXTAUTH_SECRET em runtime via setEnvDefaults.
  */
 export const authConfig = {
   trustHost: true,
@@ -13,16 +12,18 @@ export const authConfig = {
     jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role;
-        token.membershipStatus = user.membershipStatus;
+        token.isPlatformFounder = user.isPlatformFounder;
+        token.ownedCommunityId = user.ownedCommunityId ?? null;
+        token.memberCommunityId = user.memberCommunityId ?? null;
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as "FOUNDER" | "MEMBER";
-        session.user.membershipStatus = token.membershipStatus as "PENDING" | "APPROVED";
+        session.user.isPlatformFounder = Boolean(token.isPlatformFounder);
+        session.user.ownedCommunityId = (token.ownedCommunityId as string | null) ?? null;
+        session.user.memberCommunityId = (token.memberCommunityId as string | null) ?? null;
       }
       return session;
     },

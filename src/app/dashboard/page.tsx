@@ -3,8 +3,14 @@ import { redirect } from "next/navigation";
 
 export default async function DashboardIndexPage() {
   const session = await requireAuth();
-  if (session.user.role === "FOUNDER") {
+  if (session.user.isPlatformFounder) {
     redirect("/dashboard/founder");
   }
-  redirect("/dashboard/member");
+  if (session.user.ownedCommunityId) {
+    redirect("/dashboard/community-owner");
+  }
+  if (session.user.memberCommunityId) {
+    redirect("/dashboard/member");
+  }
+  redirect("/login?error=pending_approval");
 }
